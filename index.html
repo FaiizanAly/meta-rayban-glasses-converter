@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0F0F13">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Meta Glasses Converter">
+  <meta name="description" content="Convert any photo to 3024×4032 JPEG with Meta-style EXIF metadata. Free, private, client-side.">
+  <title>Meta Glasses Photo Converter</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+
+    <!-- ── Header ──────────────────────────────────────────────── -->
+    <header class="header">
+      <div class="badge">
+        <!-- Glasses icon -->
+        <svg class="badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="6" cy="15" r="4"/>
+          <circle cx="18" cy="15" r="4"/>
+          <path d="M10 15h4"/>
+          <path d="M2 15V9a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v6"/>
+        </svg>
+        Independent Utility
+      </div>
+      <h1>Meta Glasses<br>Photo Converter</h1>
+      <p class="tagline">Convert any image to 3024 &times; 4032 JPEG with Meta-style EXIF metadata</p>
+    </header>
+
+    <!-- ── Main Card ───────────────────────────────────────────── -->
+    <main class="main-card">
+
+      <!-- Upload Section -->
+      <section id="uploadSection" class="upload-section" aria-label="Image upload">
+
+        <!-- Camera / Gallery source buttons -->
+        <div class="source-buttons">
+          <button type="button" id="cameraBtn" class="source-btn" aria-label="Take a photo with camera">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+              <circle cx="12" cy="13" r="3"/>
+            </svg>
+            <span>Take Photo</span>
+          </button>
+          <button type="button" id="galleryBtn" class="source-btn" aria-label="Choose an image from gallery">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <circle cx="9" cy="9" r="2"/>
+              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+            </svg>
+            <span>Choose Image</span>
+          </button>
+        </div>
+
+        <!-- Drop zone / tap target -->
+        <div class="drop-zone" id="dropZone" role="button" tabindex="0" aria-label="Drop an image here or tap to select">
+          <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <p class="drop-title" id="dropText">Drag &amp; drop or tap to select</p>
+          <p class="drop-formats" id="dropSubtext">JPG &bull; PNG &bull; WebP &bull; GIF &bull; BMP &bull; AVIF</p>
+        </div>
+
+        <!-- Hidden file inputs -->
+        <input type="file" id="fileInput" accept="image/*" aria-hidden="true">
+        <input type="file" id="cameraInput" accept="image/*" capture="environment" aria-hidden="true">
+      </section>
+
+      <!-- File Information (shown after upload) -->
+      <section id="fileInfo" class="file-info" hidden aria-label="File details">
+        <div class="info-item">
+          <span class="info-label">Filename</span>
+          <span class="info-value" id="fileName">—</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Dimensions</span>
+          <span class="info-value" id="fileDimensions">—</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Format</span>
+          <span class="info-value" id="fileFormat">—</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Size</span>
+          <span class="info-value" id="fileSize">—</span>
+        </div>
+      </section>
+
+      <!-- Preview (shown after upload) -->
+      <div id="previewContainer" class="preview-wrapper" hidden>
+        <img id="previewImage" class="preview-image" alt="Image preview">
+        <span id="previewBadge" class="preview-badge">Source</span>
+      </div>
+
+      <!-- Convert Button -->
+      <button type="button" id="convertBtn" class="btn-primary" disabled aria-label="Convert image">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+        </svg>
+        <span id="convertBtnText">Convert Image</span>
+      </button>
+
+      <!-- Processing status (shown during conversion) -->
+      <div id="processingStatus" class="processing" hidden aria-live="polite" aria-label="Processing status">
+        <div class="spinner" aria-hidden="true"></div>
+        <span id="processingText">Processing…</span>
+      </div>
+
+      <!-- Result Section (shown after conversion) -->
+      <section id="resultSection" class="result-section" hidden aria-label="Conversion results">
+
+        <!-- Status chips -->
+        <div class="result-chips">
+          <span class="chip success">✓ 3024 × 4032</span>
+          <span class="chip success">JPEG</span>
+          <span class="chip success">GPS Removed</span>
+          <span class="chip success">EXIF Updated</span>
+        </div>
+
+        <div class="result-info" id="resultInfo"></div>
+
+        <!-- Action buttons -->
+        <div class="action-grid">
+          <button type="button" id="saveBtn" class="btn-primary" aria-label="Save converted image">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            <span>Save Image</span>
+          </button>
+
+          <div class="action-row">
+            <button type="button" id="copyBtn" class="btn-outlined" aria-label="Copy Base64 to clipboard">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+              <span>Copy Base64</span>
+            </button>
+
+            <button type="button" id="shareBtn" class="btn-outlined" aria-label="Share image">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="18" cy="5" r="3"/>
+                <circle cx="6" cy="12" r="3"/>
+                <circle cx="18" cy="19" r="3"/>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+              </svg>
+              <span>Share</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Reset -->
+        <button type="button" id="resetBtn" class="btn-ghost" aria-label="Choose another image">
+          Choose Another Image
+        </button>
+      </section>
+
+      <!-- Toast / Status messages -->
+      <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+      <!-- Privacy note -->
+      <p class="privacy-note">
+        <svg class="lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        Your image is processed locally in your browser. No upload required.
+      </p>
+    </main>
+
+    <!-- ── Footer ──────────────────────────────────────────────── -->
+    <footer class="footer">
+      Created with <span class="heart" aria-label="love">❤️</span> by
+      <a href="https://www.instagram.com/faiizanaly/" target="_blank" rel="noopener noreferrer">Faizan Ali</a>
+    </footer>
+  </div>
+
+  <!-- ── Scripts ─────────────────────────────────────────────────── -->
+  <!-- piexifjs — EXIF read/write (CDN) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/piexifjs/1.0.6/piexif.js"></script>
+  <!-- Application modules (order matters: utils → exif → imageProcessor → app) -->
+  <script src="js/utils.js"></script>
+  <script src="js/exif.js"></script>
+  <script src="js/imageProcessor.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

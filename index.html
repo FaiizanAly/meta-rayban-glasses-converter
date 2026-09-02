@@ -281,6 +281,10 @@ input[type="file"] {
   gap: 10px;
 }
 
+.sub-actions-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
 .btn-secondary {
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -458,16 +462,19 @@ input[type="file"] {
       <!-- Big All-In-One Mobile Button -->
       <button id="allInOneBtn" class="btn-all-in-one">
         <span>⚡</span>
-        <span id="allInOneText">ALL-IN-ONE CONVERT</span>
+        <span id="allInOneText">CONVERT</span>
       </button>
 
       <!-- Sub secondary action buttons -->
-      <div class="sub-actions">
+      <div class="sub-actions sub-actions-3">
         <button id="copyBtn" class="btn-secondary" disabled>
           <span>📋</span> Copy Base64
         </button>
         <button id="saveBtn" class="btn-secondary" disabled>
           <span>💾</span> Save / Share
+        </button>
+        <button id="galleryBtn2" class="btn-secondary" disabled>
+          <span>📱</span> <span id="galleryBtnText">Save to Gallery</span>
         </button>
       </div>
     </div>
@@ -512,6 +519,8 @@ const copyBtn = $("copyBtn");
 const saveBtn = $("saveBtn");
 const status = $("status");
 const allInOneText = $("allInOneText");
+const galleryBtn2 = $("galleryBtn2");
+const galleryBtnText = $("galleryBtnText");
 
 let sourceDataUrl = null;
 let finalDataUrl = null;
@@ -562,9 +571,11 @@ function handleFile(file) {
     uploadSub.textContent = `${(file.size / 1024).toFixed(1)} KB — Ready to convert`;
     
     allInOneBtn.disabled = false;
-    allInOneText.textContent = "⚡ ALL-IN-ONE: Convert, Copy & Save";
+    allInOneText.textContent = "⚡ CONVERT";
     copyBtn.disabled = true;
     saveBtn.disabled = true;
+    galleryBtn2.disabled = true;
+    galleryBtnText.textContent = "Save to Gallery";
     hideStatus();
   };
   reader.readAsDataURL(file);
@@ -748,6 +759,7 @@ allInOneBtn.addEventListener("click", async () => {
 
     copyBtn.disabled = false;
     saveBtn.disabled = false;
+    galleryBtn2.disabled = false;
 
     if (result.method === "share") {
       showStatus("✅ Base64 copied & Share Sheet opened (Tap 'Save Image').", "success");
@@ -777,6 +789,60 @@ saveBtn.addEventListener("click", async () => {
   if (!finalDataUrl) return;
   await saveOrShareImage(finalDataUrl);
   showStatus("Save triggered! (Or tap & hold image to save).", "success");
+});
+
+// 📱 Save to Gallery Button
+galleryBtn2.addEventListener("click", async () => {
+  if (!finalDataUrl) return;
+
+  galleryBtn2.disabled = true;
+  galleryBtnText.textContent = "Saving…";
+
+  try {
+    const blob = dataUrlToBlob(finalDataUrl);
+    const file = new File([blob], "meta-glasses-converted.jpg", { type: "image/jpeg" });
+
+    // Try Web Share API with file (mobile: Android / iOS)
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file] });
+        galleryBtnText.textContent = "Saved successfully";
+        showStatus("Image shared/saved to gallery!", "success");
+        setTimeout(() => { galleryBtnText.textContent = "Save to Gallery"; }, 2500);
+        return;
+      } catch (err) {
+        if (err.name === "AbortError") {
+          // User cancelled — reset silently, no error
+          galleryBtnText.textContent = "Save to Gallery";
+          return;
+        }
+        // Other share error — fall through to download
+      }
+    }
+
+    // Desktop / fallback: direct download
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = blobUrl;
+    a.download = "meta-glasses-converted.jpg";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(blobUrl);
+      a.remove();
+    }, 4000);
+
+    galleryBtnText.textContent = "Saved successfully";
+    showStatus("Image downloaded as meta-glasses-converted.jpg", "success");
+    setTimeout(() => { galleryBtnText.textContent = "Save to Gallery"; }, 2500);
+  } catch (err) {
+    console.error(err);
+    showStatus("Save failed. Try again.", "error");
+    galleryBtnText.textContent = "Save to Gallery";
+  } finally {
+    galleryBtn2.disabled = false;
+  }
 });
 </script>
 </body>

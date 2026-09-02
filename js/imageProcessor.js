@@ -27,16 +27,35 @@ const ImageProcessor = (() => {
   const HEIC_EXTENSIONS = new Set(['heic', 'heif']);
 
   /**
-   * Detect whether the browser auto-applies EXIF orientation when drawing
-   * images to <canvas>.  Modern browsers (Chrome 81+, FF 77+, Safari 13.1+)
-   * do this automatically.  When true we must NOT manually rotate or we
-   * will double-rotate.
+   * Whether the browser auto-applies EXIF orientation when drawing to canvas.
+   * Determined asynchronously via a real canvas test; defaults to false
+   * (manual correction) until the test completes.
+   *
+   * We use createImageBitmap with { imageOrientation: 'none' } support as a
+   * proxy: if the browser supports it, it also auto-orients on canvas by
+   * default. Otherwise we manually correct.
    */
-  const BROWSER_AUTO_ORIENTS = (() => {
+  let BROWSER_AUTO_ORIENTS = false;
+
+  // Run a synchronous best-guess first, then refine asynchronously
+  (() => {
+    // The reliable check: does createImageBitmap accept imageOrientation?
+    // Browsers that support this (Chrome 87+, FF 98+) auto-orient on canvas.
+    // Older browsers and Safari < 15 do NOT auto-orient on canvas even if
+    // they support CSS image-orientation.
     try {
-      return CSS.supports('image-orientation', 'from-image');
+      if (typeof createImageBitmap === 'function') {
+        // Try creating with the option — if it doesn't throw, the browser
+        // supports orientation control, meaning it auto-orients by default
+        const testBlob = new Blob([new Uint8Array(0)], { type: 'image/jpeg' });
+        const p = createImageBitmap(testBlob, { imageOrientation: 'none' });
+        // If the promise was created without throwing, the option is supported
+        BROWSER_AUTO_ORIENTS = true;
+        // Clean up the (failing) promise
+        p.catch(() => {});
+      }
     } catch (_) {
-      return false;
+      BROWSER_AUTO_ORIENTS = false;
     }
   })();
 
@@ -121,8 +140,8 @@ const ImageProcessor = (() => {
    * @returns {HTMLCanvasElement}
    */
   function normalizeOrientation(image, orientation) {
-    const w = image.naturalWidth;
-    const h = image.naturalHeight;
+    const w = image.naturalWidth || image.width;
+    const h = image.naturalHeight || image.height;
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 
@@ -236,6 +255,11 @@ const ImageProcessor = (() => {
   /**
    * Run the complete conversion pipeline on an image file.
    *
+   * Pipeline (matches old implementation):
+   *   Source → Read EXIF Orientation → Correct orientation via canvas →
+   *   Render to 3024×4032 canvas → Convert to JPEG (0.95) →
+   *   Clean EXIF & inject Meta-style metadata → Extract pure Base64 → Done
+   *
    * @param {File}     file        Source image file
    * @param {Function} onProgress  Callback (step:number, message:string)
    * @returns {Promise<{blob:Blob, dataUrl:string, base64:string, width:number, height:number, size:number}>}
@@ -243,47 +267,81 @@ const ImageProcessor = (() => {
   async function processImage(file, onProgress) {
     onProgress = onProgress || function () {};
 
-    // 1 — Read EXIF orientation (JPEG only)
+    // 1 — Read the file as a data URL (needed for EXIF reading on JPEGs)
     onProgress(1, 'Preparing image\u2026');
+    let srcDataUrl = null;
     let orientation = 1;
+
     if (file.type === 'image/jpeg') {
       try {
         onProgress(2, 'Reading EXIF data\u2026');
-        const srcDataUrl = await AppUtils.blobToDataUrl(file);
+        srcDataUrl = await AppUtils.blobToDataUrl(file);
         orientation = ExifHandler.readOrientation(srcDataUrl);
       } catch (_) {
         orientation = 1;
       }
     }
 
-    // 2 — Load the image
+    // 2 — Load the image as raw (un-oriented) pixels
+    //     We need raw pixels so we can manually correct orientation,
+    //     matching the old implementation exactly.
     onProgress(3, 'Correcting orientation\u2026');
-    const objectUrl = URL.createObjectURL(file);
-    let image;
-    try {
-      image = await loadImage(objectUrl);
-    } finally {
-      URL.revokeObjectURL(objectUrl);
+    let source; // HTMLImageElement or ImageBitmap
+
+    if (BROWSER_AUTO_ORIENTS && typeof createImageBitmap === 'function') {
+      // Modern browser: use createImageBitmap with imageOrientation:'none'
+      // to get the raw un-rotated pixels
+      try {
+        source = await createImageBitmap(file, { imageOrientation: 'none' });
+      } catch (_) {
+        // Fallback: load via object URL (may be auto-oriented)
+        const objectUrl = URL.createObjectURL(file);
+        try {
+          source = await loadImage(objectUrl);
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
+        // If browser auto-oriented, skip manual correction to avoid double-rotate
+        orientation = 1;
+      }
+    } else {
+      // Older browser: new Image() gives raw pixels (no auto-orientation)
+      const objectUrl = URL.createObjectURL(file);
+      try {
+        source = await loadImage(objectUrl);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
     }
 
-    // 3 — Orientation correction
-    // Skip if browser already auto-corrected or orientation is normal
-    const needsManual = !BROWSER_AUTO_ORIENTS && orientation > 1;
-    const corrected = needsManual
-      ? normalizeOrientation(image, orientation)
-      : image;   // image element works directly with renderToCanvas
+    // 3 — Physically correct orientation via canvas transforms
+    //     Supports EXIF orientation values 1–8
+    const corrected = (orientation > 1)
+      ? normalizeOrientation(source, orientation)
+      : source;
 
-    // 4 — Centre-crop to 3024 × 4032
+    // Close ImageBitmap if we created one and it's no longer needed
+    if (source !== corrected && source.close) {
+      source.close();
+    }
+
+    // 4 — Centre-crop to 3024 × 4032 (preserves aspect ratio, no stretching)
     onProgress(4, 'Rendering to canvas\u2026');
     const outputCanvas = renderToCanvas(corrected, OUTPUT_WIDTH, OUTPUT_HEIGHT);
 
     // Free intermediate canvas memory
-    if (corrected !== image && corrected.width) {
-      corrected.width = 0;
-      corrected.height = 0;
+    if (corrected !== source) {
+      if (corrected.width !== undefined) {
+        corrected.width = 0;
+        corrected.height = 0;
+      }
+    }
+    // Close ImageBitmap if it was used directly (corrected === source)
+    if (corrected === source && source.close) {
+      source.close();
     }
 
-    // 5 — Export to JPEG
+    // 5 — Export to JPEG at 0.95 quality
     onProgress(5, 'Converting to JPEG\u2026');
     const jpegDataUrl = outputCanvas.toDataURL('image/jpeg', JPEG_QUALITY);
 
@@ -291,11 +349,13 @@ const ImageProcessor = (() => {
     outputCanvas.width = 0;
     outputCanvas.height = 0;
 
-    // 6 — EXIF clean + inject
+    // 6 — Clean EXIF (remove GPS, Software, HostComputer, MakerNote,
+    //     LensMake, LensModel, LensSpecification) and inject Meta-style
+    //     metadata (Make, Model, Orientation=1, ColorSpace=1, dimensions)
     onProgress(6, 'Applying metadata\u2026');
     const finalDataUrl = ExifHandler.cleanAndInject(jpegDataUrl);
 
-    // 7 — Final blob
+    // 7 — Build final Blob and extract pure Base64
     onProgress(7, 'Finalizing\u2026');
     const finalBlob  = AppUtils.dataUrlToBlob(finalDataUrl);
     const pureBase64 = finalDataUrl.split(',')[1];

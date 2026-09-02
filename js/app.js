@@ -250,11 +250,37 @@
   }
 
   // ── Save ───────────────────────────────────────────────────────
-  function handleSave() {
+  async function handleSave() {
     if (!result || !result.blob) return;
 
+    const filename = 'meta-glasses-converted.jpg';
+
     try {
-      const res = AppUtils.downloadImage(result.blob, 'meta-glasses-converted.jpg');
+      // Create a proper File object from the blob
+      const file = new File([result.blob], filename, { type: 'image/jpeg' });
+
+      // On mobile browsers, try Web Share API first because <a download>
+      // often doesn't trigger an actual save on iOS Safari / some Android browsers
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+      if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: 'Meta Glasses Photo' });
+          showToast('Image saved successfully!', 'success');
+          return;
+        } catch (shareErr) {
+          if (shareErr.name === 'AbortError') {
+            // User cancelled the share sheet — do NOT show success
+            showToast('Save cancelled.', 'info');
+            return;
+          }
+          // Share failed — fall through to download fallback
+          console.warn('[MetaGlasses] Share failed, falling back to download:', shareErr);
+        }
+      }
+
+      // Desktop / fallback: use blob download via <a> element
+      const res = AppUtils.downloadImage(result.blob, filename);
       if (res.success) {
         showToast('Image download started.', 'success');
       }
